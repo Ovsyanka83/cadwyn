@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 from contextlib import AsyncExitStack
 from contextvars import ContextVar

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import email.message
 import functools
 import inspect
@@ -8,7 +10,7 @@ from contextlib import AsyncExitStack
 from contextvars import ContextVar
 from datetime import date
 from enum import Enum
-from typing import Any, ClassVar, ParamSpec, TypeAlias, TypeVar
+from typing import ClassVar, Union, get_args
 
 from fastapi import BackgroundTasks, HTTPException, params
 from fastapi import Request as FastapiRequest
@@ -23,7 +25,7 @@ from fastapi.routing import APIRoute, _prepare_response_content
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 from starlette._utils import is_async_callable
-from typing_extensions import assert_never, deprecated
+from typing_extensions import Any, ParamSpec, TypeAlias, TypeVar, assert_never, deprecated
 
 from cadwyn._utils import classproperty
 from cadwyn.exceptions import (
@@ -51,14 +53,10 @@ _CADWYN_REQUEST_PARAM_NAME = "cadwyn_request_param"
 _CADWYN_RESPONSE_PARAM_NAME = "cadwyn_response_param"
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
-PossibleInstructions: TypeAlias = (
-    AlterSchemaSubInstruction
-    | AlterEndpointSubInstruction
-    | AlterEnumSubInstruction
-    | SchemaHadInstruction
-    | staticmethod
-)
-APIVersionVarType: TypeAlias = ContextVar[VersionDate | None] | ContextVar[VersionDate]
+PossibleInstructions: TypeAlias = Union[
+    AlterSchemaSubInstruction, AlterEndpointSubInstruction, AlterEnumSubInstruction, SchemaHadInstruction, staticmethod
+]
+APIVersionVarType: TypeAlias = Union[ContextVar[Union[VersionDate, None]], ContextVar[VersionDate]]
 IdentifierPythonPath = str
 
 
@@ -75,7 +73,7 @@ class VersionChange:
     alter_request_by_path_instructions: ClassVar[dict[str, list[_AlterRequestByPathInstruction]]] = Sentinel
     alter_response_by_schema_instructions: ClassVar[dict[type, list[_AlterResponseBySchemaInstruction]]] = Sentinel
     alter_response_by_path_instructions: ClassVar[dict[str, list[_AlterResponseByPathInstruction]]] = Sentinel
-    _bound_version_bundle: "VersionBundle | None"
+    _bound_version_bundle: VersionBundle | None
 
     def __init_subclass__(cls, _abstract: bool = False) -> None:
         super().__init_subclass__()
@@ -112,11 +110,11 @@ class VersionChange:
         cls.alter_response_by_schema_instructions = defaultdict(list)
         cls.alter_response_by_path_instructions = defaultdict(list)
         for alter_instruction in cls.instructions_to_migrate_to_previous_version:
-            if isinstance(alter_instruction, SchemaHadInstruction | AlterSchemaSubInstruction):
+            if isinstance(alter_instruction, (SchemaHadInstruction,) + get_args(AlterSchemaSubInstruction)):
                 cls.alter_schema_instructions.append(alter_instruction)
-            elif isinstance(alter_instruction, AlterEnumSubInstruction):
+            elif isinstance(alter_instruction, get_args(AlterEnumSubInstruction)):
                 cls.alter_enum_instructions.append(alter_instruction)
-            elif isinstance(alter_instruction, AlterEndpointSubInstruction):
+            elif isinstance(alter_instruction, get_args(AlterEndpointSubInstruction)):
                 cls.alter_endpoint_instructions.append(alter_instruction)
             elif isinstance(alter_instruction, staticmethod):  # pragma: no cover
                 raise NotImplementedError(f'"{alter_instruction}" is an unacceptable version change instruction')
@@ -139,17 +137,19 @@ class VersionChange:
                 f"Attribute 'instructions_to_migrate_to_previous_version' must be a sequence in '{cls.__name__}'.",
             )
         for instruction in cls.instructions_to_migrate_to_previous_version:
-            if not isinstance(instruction, PossibleInstructions):
+            if not isinstance(instruction, get_args(PossibleInstructions)):
                 raise CadwynStructureError(
                     f"Instruction '{instruction}' is not allowed. Please, use the correct instruction types",
                 )
         for attr_name, attr_value in cls.__dict__.items():
             if not isinstance(
                 attr_value,
-                _AlterRequestBySchemaInstruction
-                | _AlterRequestByPathInstruction
-                | _AlterResponseBySchemaInstruction
-                | _AlterResponseByPathInstruction,
+                (
+                    _AlterRequestBySchemaInstruction,
+                    _AlterRequestByPathInstruction,
+                    _AlterResponseBySchemaInstruction,
+                    _AlterResponseByPathInstruction,
+                ),
             ) and attr_name not in {
                 "description",
                 "side_effects",
@@ -186,7 +186,7 @@ class VersionChangeWithSideEffects(VersionChange, _abstract=True):
             )
 
     @classproperty
-    def is_applied(cls: type["VersionChangeWithSideEffects"]) -> bool:  # pyright: ignore[reportGeneralTypeIssues]
+    def is_applied(cls: type[VersionChangeWithSideEffects]) -> bool:  # pyright: ignore[reportGeneralTypeIssues]
         if (
             cls._bound_version_bundle is None
             or cls not in cls._bound_version_bundle._version_changes_to_version_mapping
@@ -339,7 +339,7 @@ class VersionBundle:
     @functools.cached_property
     def _version_changes_to_version_mapping(
         self,
-    ) -> dict[type[VersionChange] | type[VersionChangeWithSideEffects], VersionDate]:
+    ) -> dict[type[VersionChange | VersionChangeWithSideEffects], VersionDate]:
         return {version_change: version.value for version in self.versions for version_change in version.changes}
 
     async def _migrate_request(
@@ -523,11 +523,11 @@ class VersionBundle:
             # TODO (https://github.com/zmievsa/cadwyn/issues/126): Add support for migrating `FileResponse`
             # Starlette breaks Liskov Substitution principle and
             # doesn't define `body` for `StreamingResponse` and `FileResponse`
-            if isinstance(response_or_response_body, StreamingResponse | FileResponse):
+            if isinstance(response_or_response_body, (StreamingResponse, FileResponse)):
                 body = None
             elif response_or_response_body.body:
                 if (isinstance(response_or_response_body, JSONResponse) or raised_exception is not None) and isinstance(
-                    response_or_response_body.body, str | bytes
+                    response_or_response_body.body, (str, bytes)
                 ):
                     body = json.loads(response_or_response_body.body)
                 elif isinstance(response_or_response_body.body, bytes):

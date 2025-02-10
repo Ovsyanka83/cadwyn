@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import dataclasses
 import functools
@@ -13,8 +15,8 @@ from typing import (
     Annotated,
     Any,
     Generic,
-    TypeAlias,
     TypeVar,
+    Union,
     _BaseGenericAlias,  # pyright: ignore[reportAttributeAccessIssue]
     cast,
     final,
@@ -23,11 +25,13 @@ from typing import (
     overload,
 )
 
+import attrs
 import fastapi.params
 import fastapi.security.base
 import fastapi.utils
 import pydantic
 import pydantic._internal._decorators
+import typing_extensions
 from fastapi import Response
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, RootModel
@@ -41,7 +45,7 @@ from pydantic._internal._decorators import (
     ValidatorDecoratorInfo,
 )
 from pydantic.fields import ComputedFieldInfo, FieldInfo
-from typing_extensions import Doc, Self, _AnnotatedAlias, assert_never
+from typing_extensions import Doc, Self, TypeAlias, _AnnotatedAlias, assert_never
 
 from cadwyn._utils import Sentinel, UnionType, fully_unwrap_decorator, lenient_issubclass
 from cadwyn.exceptions import InvalidGenerationInstructionError
@@ -67,7 +71,7 @@ if TYPE_CHECKING:
 _Call = TypeVar("_Call", bound=Callable[..., Any])
 
 _FieldName: TypeAlias = str
-_T_ANY_MODEL = TypeVar("_T_ANY_MODEL", bound=BaseModel | Enum)
+_T_ANY_MODEL = TypeVar("_T_ANY_MODEL", bound=Union[BaseModel, Enum])
 _T_ENUM = TypeVar("_T_ENUM", bound=Enum)
 
 _T_PYDANTIC_MODEL = TypeVar("_T_PYDANTIC_MODEL", bound=BaseModel)
@@ -97,7 +101,7 @@ _empty_field_info = Field()
 dict_of_empty_field_info = {k: getattr(_empty_field_info, k) for k in FieldInfo.__slots__}
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass()
 class PydanticFieldWrapper:
     """We DO NOT maintain field.metadata at all"""
 
@@ -117,7 +121,7 @@ class PydanticFieldWrapper:
     def delete_attribute(self, *, name: str) -> None:
         self.passed_field_attributes.pop(name)
 
-    def generate_field_copy(self, generator: "SchemaGenerator") -> pydantic.fields.FieldInfo:
+    def generate_field_copy(self, generator: SchemaGenerator) -> pydantic.fields.FieldInfo:
         return pydantic.Field(
             **generator.annotation_transformer.change_version_of_annotation(self.passed_field_attributes)
         )
@@ -135,25 +139,25 @@ def _extract_passed_field_attributes(field_info: FieldInfo):
     return attributes
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass()
 class _ModelBundle:
-    enums: dict[type[Enum], "_EnumWrapper"]
-    schemas: dict[type[BaseModel], "_PydanticModelWrapper"]
+    enums: dict[type[Enum], _EnumWrapper]
+    schemas: dict[type[BaseModel], _PydanticModelWrapper]
 
 
-@dataclasses.dataclass(slots=True, kw_only=True)
+@dataclasses.dataclass()
 class _RuntimeSchemaGenContext:
-    version_bundle: "VersionBundle"
-    current_version: "Version | HeadVersion"
+    version_bundle: VersionBundle
+    current_version: Version | HeadVersion
     models: _ModelBundle
-    latest_version: "Version" = dataclasses.field(init=False)
+    latest_version: Version = dataclasses.field(init=False)
 
     def __post_init__(self):
         self.latest_version = max(self.version_bundle.versions, key=lambda v: v.value)
 
 
 def migrate_response_body(
-    versions: "VersionBundle",
+    versions: VersionBundle,
     latest_response_model: type[pydantic.BaseModel],
     *,
     latest_body: Any,
@@ -189,7 +193,7 @@ def _unwrap_model(model: type[_T_ANY_MODEL]) -> type[_T_ANY_MODEL]:
     return model
 
 
-@dataclasses.dataclass(slots=True, kw_only=True)
+@attrs.define(slots=True, kw_only=True)
 class _ValidatorWrapper:
     kwargs: dict[str, Any]
     func: Callable
@@ -197,7 +201,7 @@ class _ValidatorWrapper:
     is_deleted: bool = False
 
 
-@dataclasses.dataclass(slots=True, kw_only=True)
+@attrs.define(slots=True, kw_only=True)
 class _PerFieldValidatorWrapper(_ValidatorWrapper):
     fields: list[str]
 
@@ -230,7 +234,7 @@ def _is_dunder(attr_name: str):
     return attr_name.startswith("__") and attr_name.endswith("__")
 
 
-def _wrap_pydantic_model(model: type[_T_PYDANTIC_MODEL]) -> "_PydanticModelWrapper[_T_PYDANTIC_MODEL]":
+def _wrap_pydantic_model(model: type[_T_PYDANTIC_MODEL]) -> _PydanticModelWrapper[_T_PYDANTIC_MODEL]:
     decorators = _get_model_decorators(model)
     validators = {}
     for decorator_wrapper in decorators:
@@ -268,13 +272,13 @@ def _wrap_pydantic_model(model: type[_T_PYDANTIC_MODEL]) -> "_PydanticModelWrapp
 
 
 @final
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass()
 class _PydanticModelWrapper(Generic[_T_PYDANTIC_MODEL]):
     cls: type[_T_PYDANTIC_MODEL] = dataclasses.field(repr=False)
     name: str
     doc: str | None = dataclasses.field(repr=False)
     fields: Annotated[
-        dict["_FieldName", PydanticFieldWrapper],
+        dict[_FieldName, PydanticFieldWrapper],
         Doc(
             "Fields that belong to this model, not to its parents. "
             "I.e. The ones that were either defined or overridden "
@@ -315,7 +319,7 @@ class _PydanticModelWrapper(Generic[_T_PYDANTIC_MODEL]):
     def __hash__(self) -> int:
         return hash(id(self))
 
-    def _get_parents(self, schemas: "dict[type, Self]"):
+    def _get_parents(self, schemas: dict[type, Self]):
         if self._parents is not None:
             return self._parents
         parents = []
@@ -327,7 +331,7 @@ class _PydanticModelWrapper(Generic[_T_PYDANTIC_MODEL]):
         self._parents = parents
         return parents
 
-    def _get_defined_fields_through_mro(self, schemas: "dict[type, Self]") -> dict[str, PydanticFieldWrapper]:
+    def _get_defined_fields_through_mro(self, schemas: dict[type, Self]) -> dict[str, PydanticFieldWrapper]:
         fields = {}
 
         for parent in reversed(self._get_parents(schemas)):
@@ -335,7 +339,7 @@ class _PydanticModelWrapper(Generic[_T_PYDANTIC_MODEL]):
 
         return fields | self.fields
 
-    def _get_defined_annotations_through_mro(self, schemas: "dict[type, Self]") -> dict[str, Any]:
+    def _get_defined_annotations_through_mro(self, schemas: dict[type, Self]) -> dict[str, Any]:
         annotations = {}
 
         for parent in reversed(self._get_parents(schemas)):
@@ -343,7 +347,7 @@ class _PydanticModelWrapper(Generic[_T_PYDANTIC_MODEL]):
 
         return annotations | self.annotations
 
-    def generate_model_copy(self, generator: "SchemaGenerator") -> type[_T_PYDANTIC_MODEL]:
+    def generate_model_copy(self, generator: SchemaGenerator) -> type[_T_PYDANTIC_MODEL]:
         per_field_validators = {
             name: validator.decorator(*validator.fields, **validator.kwargs)(validator.func)
             for name, validator in self.validators.items()
@@ -374,7 +378,7 @@ class _PydanticModelWrapper(Generic[_T_PYDANTIC_MODEL]):
 
 
 def is_regular_function(call: Callable):
-    return isinstance(call, types.FunctionType | types.MethodType)
+    return isinstance(call, (types.FunctionType, types.MethodType))
 
 
 class _CallableWrapper:
@@ -413,7 +417,7 @@ class _AsyncCallableWrapper(_CallableWrapper):
 
 @final
 class _AnnotationTransformer:
-    def __init__(self, generator: "SchemaGenerator") -> None:
+    def __init__(self, generator: SchemaGenerator) -> None:
         # This cache is not here for speeding things up. It's for preventing the creation of copies of the same object
         # because such copies could produce weird behaviors at runtime, especially if you/fastapi do any comparisons.
         # It's defined here and not on the method because of this: https://youtu.be/sVjtp6tGo0g
@@ -435,7 +439,7 @@ class _AnnotationTransformer:
                 for key, value in annotation.items()
             }
 
-        elif isinstance(annotation, list | tuple):
+        elif isinstance(annotation, (list, tuple)):
             return type(annotation)(self.change_version_of_annotation(v) for v in annotation)
         else:
             return self.change_versions_of_a_non_container_annotation(annotation)
@@ -464,7 +468,7 @@ class _AnnotationTransformer:
         self._remake_endpoint_dependencies(route)
 
     def _change_version_of_a_non_container_annotation(self, annotation: Any) -> Any:
-        if isinstance(annotation, _BaseGenericAlias | types.GenericAlias):
+        if isinstance(annotation, (_BaseGenericAlias, types.GenericAlias)):
             return get_origin(annotation)[tuple(self.change_version_of_annotation(arg) for arg in get_args(annotation))]
         elif isinstance(annotation, fastapi.params.Security):
             return fastapi.params.Security(
@@ -482,7 +486,7 @@ class _AnnotationTransformer:
             return getitem(
                 tuple(self.change_version_of_annotation(a) for a in get_args(annotation)),
             )
-        elif annotation is Any or isinstance(annotation, typing.NewType):
+        elif annotation is Any or isinstance(annotation, typing_extensions.NewType):
             return annotation
         elif isinstance(annotation, type):
             return self._change_version_of_type(annotation)
@@ -505,7 +509,7 @@ class _AnnotationTransformer:
             return annotation
 
     def _change_version_of_type(self, annotation: type):
-        if lenient_issubclass(annotation, BaseModel | Enum):
+        if lenient_issubclass(annotation, (BaseModel, Enum)):
             return self.generator[annotation]
         else:
             return annotation
@@ -623,7 +627,7 @@ class SchemaGenerator:
     def __getitem__(self, model: type[_T_ANY_MODEL], /) -> type[_T_ANY_MODEL]:
         if (
             not isinstance(model, type)
-            or not lenient_issubclass(model, BaseModel | Enum)
+            or not lenient_issubclass(model, (BaseModel, Enum))
             or model in (BaseModel, RootModel)
         ):
             return model
@@ -640,13 +644,13 @@ class SchemaGenerator:
         return cast(type[_T_ANY_MODEL], model_copy)
 
     @overload
-    def _get_wrapper_for_model(self, model: type[BaseModel]) -> "_PydanticModelWrapper[BaseModel]": ...
+    def _get_wrapper_for_model(self, model: type[BaseModel]) -> _PydanticModelWrapper[BaseModel]: ...
     @overload
-    def _get_wrapper_for_model(self, model: type[Enum]) -> "_EnumWrapper[Enum]": ...
+    def _get_wrapper_for_model(self, model: type[Enum]) -> _EnumWrapper[Enum]: ...
 
     def _get_wrapper_for_model(
         self, model: type[BaseModel | Enum]
-    ) -> "_PydanticModelWrapper[BaseModel] | _EnumWrapper[Enum]":
+    ) -> _PydanticModelWrapper[BaseModel] | _EnumWrapper[Enum]:
         model = _unwrap_model(model)
 
         if model in self.model_bundle.schemas:
@@ -666,7 +670,7 @@ class SchemaGenerator:
 
 
 @cache
-def generate_versioned_models(versions: "VersionBundle") -> "dict[str, SchemaGenerator]":
+def generate_versioned_models(versions: VersionBundle) -> dict[str, SchemaGenerator]:
     models = _create_model_bundle(versions)
 
     version_to_context_map = {}
@@ -682,7 +686,7 @@ def generate_versioned_models(versions: "VersionBundle") -> "dict[str, SchemaGen
     return version_to_context_map
 
 
-def _create_model_bundle(versions: "VersionBundle"):
+def _create_model_bundle(versions: VersionBundle):
     return _ModelBundle(
         enums={enum: _EnumWrapper(enum) for enum in versions.versioned_enums.values()},
         schemas={schema: _wrap_pydantic_model(schema) for schema in versions.versioned_schemas.values()},
@@ -712,7 +716,7 @@ def _apply_alter_schema_instructions(
         schema_info = modified_schemas[alter_schema_instruction.schema]
         if isinstance(alter_schema_instruction, FieldExistedAsInstruction):
             _add_field_to_model(schema_info, modified_schemas, alter_schema_instruction, version_change_name)
-        elif isinstance(alter_schema_instruction, FieldHadInstruction | FieldDidntHaveInstruction):
+        elif isinstance(alter_schema_instruction, (FieldHadInstruction, FieldDidntHaveInstruction)):
             _change_field_in_model(
                 schema_info,
                 modified_schemas,
@@ -750,7 +754,7 @@ def _apply_alter_schema_instructions(
 
 
 def _apply_alter_enum_instructions(
-    enums: "dict[type, _EnumWrapper]",
+    enums: dict[type, _EnumWrapper],
     alter_enum_instructions: Sequence[AlterEnumSubInstruction],
     version_change_name: str,
 ):
@@ -792,7 +796,7 @@ def _change_model(
 
 def _add_field_to_model(
     model: _PydanticModelWrapper,
-    schemas: "dict[type, _PydanticModelWrapper]",
+    schemas: dict[type, _PydanticModelWrapper],
     alter_schema_instruction: FieldExistedAsInstruction,
     version_change_name: str,
 ):
@@ -812,7 +816,7 @@ def _add_field_to_model(
 
 def _change_field_in_model(
     model: _PydanticModelWrapper,
-    schemas: "dict[type, _PydanticModelWrapper]",
+    schemas: dict[type, _PydanticModelWrapper],
     alter_schema_instruction: FieldHadInstruction | FieldDidntHaveInstruction,
     version_change_name: str,
 ):
@@ -879,12 +883,12 @@ def _change_field(
             defined_annotations[alter_schema_instruction.name],
         )
 
-    for attr_name in alter_schema_instruction.field_changes.__dataclass_fields__:
-        attr_value = getattr(alter_schema_instruction.field_changes, attr_name)
+    for attr in attrs.fields(type(alter_schema_instruction.field_changes)):
+        attr_value = getattr(alter_schema_instruction.field_changes, attr.name)
         if attr_value is not Sentinel:
-            if field.passed_field_attributes.get(attr_name, Sentinel) == attr_value:
+            if field.passed_field_attributes.get(attr.name, Sentinel) == attr_value:
                 raise InvalidGenerationInstructionError(
-                    f'You tried to change the attribute "{attr_name}" of field '
+                    f'You tried to change the attribute "{attr.name}" of field '
                     f'"{alter_schema_instruction.name}" '
                     f'from "{model.name}" to {attr_value!r} in "{version_change_name}" '
                     "but it already has that value.",
@@ -951,7 +955,7 @@ class _EnumWrapper(Generic[_T_ENUM]):
         memo[id(self)] = result
         return result
 
-    def generate_model_copy(self, generator: "SchemaGenerator") -> type[_T_ENUM]:
+    def generate_model_copy(self, generator: SchemaGenerator) -> type[_T_ENUM]:
         enum_dict = Enum.__prepare__(self.name, self.cls.__bases__)
 
         raw_member_map = {k: v.value if isinstance(v, Enum) else v for k, v in self.members.items()}

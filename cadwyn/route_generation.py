@@ -1,8 +1,11 @@
+from __future__ import annotations
+
+import dataclasses
 import re
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from copy import copy, deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -54,13 +57,13 @@ _RouteT = TypeVar("_RouteT", bound=BaseRoute)
 _DELETED_ROUTE_TAG = "_CADWYN_DELETED_ROUTE"
 
 
-@dataclass(slots=True, frozen=True, eq=True)
+@dataclass(frozen=True, eq=True)
 class _EndpointInfo:
     endpoint_path: str
     endpoint_methods: frozenset[str]
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(frozen=True)
 class GeneratedRouters(Generic[_R, _WR]):
     endpoints: dict[VersionDate, _R]
     webhooks: dict[VersionDate, _WR]
@@ -411,7 +414,7 @@ def _add_data_migrations_to_route(
     head_route: Any,
     template_body_field: type[BaseModel] | None,
     template_body_field_name: str | None,
-    dependant_for_request_migrations: "Dependant",
+    dependant_for_request_migrations: Dependant,
     versions: VersionBundle,
 ):
     if not (route.dependant.request_param_name and route.dependant.response_param_name):  # pragma: no cover
@@ -438,7 +441,13 @@ def _apply_endpoint_had_instruction(
     instruction: EndpointHadInstruction,
     original_route: APIRoute,
 ):
-    for attr_name in instruction.attributes.__dataclass_fields__:
+    field_names: Iterable[str]
+    if dataclasses.is_dataclass(instruction.attributes):
+        field_names = instruction.attributes.__dataclass_fields__
+    else:
+        import attrs
+        field_names = (field.name for field in attrs.fields(type(instruction.attributes)))
+    for attr_name in field_names:
         attr = getattr(instruction.attributes, attr_name)
         if attr is not Sentinel:
             if getattr(original_route, attr_name) == attr:

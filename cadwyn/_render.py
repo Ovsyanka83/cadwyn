@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ast
 import inspect
 import textwrap
@@ -30,7 +32,7 @@ def render_module_by_path(module_path: str, app_path: str, version: str):
     attributes_to_alter = [
         name
         for name, value in module.__dict__.items()
-        if lenient_issubclass(value, Enum | BaseModel) and value.__module__ == module.__name__
+        if lenient_issubclass(value, (Enum, BaseModel)) and value.__module__ == module.__name__
     ]
 
     try:
@@ -97,7 +99,7 @@ def _render_enum_model(wrapper: _EnumWrapper, original_cls_node: ast.ClassDef):
     ]
 
     old_body = [
-        n for n in original_cls_node.body if not isinstance(n, ast.AnnAssign | ast.Assign | ast.Pass | ast.Constant)
+        n for n in original_cls_node.body if not isinstance(n, (ast.AnnAssign, ast.Assign, ast.Pass, ast.Constant))
     ]
     docstring = pop_docstring_from_cls_body(old_body)
 
@@ -130,7 +132,7 @@ def _render_pydantic_model(wrapper: _PydanticModelWrapper, original_cls_node: as
         n
         for n in original_cls_node.body
         if not (
-            isinstance(n, ast.AnnAssign | ast.Assign | ast.Pass | ast.Constant)
+            isinstance(n, (ast.AnnAssign, ast.Assign, ast.Pass, ast.Constant))
             or (isinstance(n, ast.FunctionDef) and n.name in wrapper.validators)
         )
     ]

@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import ast
 import inspect
+import sys
 from collections.abc import Callable
 from enum import Enum, auto
-from types import GenericAlias, LambdaType, NoneType
+from types import GenericAlias, LambdaType
 from typing import (  # noqa: UP035
     Any,
     List,
+    Union,
     cast,
     get_args,
     get_origin,
@@ -16,6 +20,12 @@ import annotated_types
 from cadwyn._utils import PlainRepr, UnionType
 from cadwyn.exceptions import InvalidGenerationInstructionError
 
+if sys.version_info >= (3, 10):
+    from types import NoneType
+else:
+    NoneType = type(None)
+
+
 _LambdaFunctionName = (lambda: None).__name__  # pragma: no branch
 
 
@@ -25,13 +35,13 @@ _BaseGenericAlias = cast(type, type(List[int])).mro()[1]  # noqa: UP006
 # type(list[int]) and type(List[int]) are different which is why we have to do this.
 # Please note that this problem is much wider than just lists which is why we use typing._BaseGenericAlias
 # instead of typing._GenericAlias.
-GenericAliasUnion = GenericAlias | _BaseGenericAlias
+GenericAliasUnion = Union[GenericAlias, _BaseGenericAlias]
 
 
 def get_fancy_repr(value: Any) -> Any:
     if isinstance(value, annotated_types.GroupedMetadata) and hasattr(type(value), "__dataclass_fields__"):
         return transform_grouped_metadata(value)
-    if isinstance(value, list | tuple | set | frozenset):
+    if isinstance(value, (list, tuple, set, frozenset)):
         return transform_collection(value)
     if isinstance(value, dict):
         return transform_dict(value)
@@ -55,7 +65,7 @@ def get_fancy_repr(value: Any) -> Any:
         return transform_other(value)
 
 
-def transform_grouped_metadata(value: "annotated_types.GroupedMetadata"):
+def transform_grouped_metadata(value: annotated_types.GroupedMetadata):
     empty_obj = type(value)
 
     modified_fields = [

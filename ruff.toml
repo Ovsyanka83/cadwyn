@@ -1,4 +1,4 @@
-target-version = "py310"
+target-version = "py39"
 line-length = 120
 extend-exclude = ["scripts/*.py"]
 
@@ -112,6 +112,10 @@ ignore = [
     "N805",   # First argument of a method should be named `self` (pydantic validators don't play well with this)
     "UP007",  # Use `X | Y` for type annotations (we need this for testing and our runtime logic)
     "RET506", # Unnecessary `elif` after `raise` statement
+
+    "TC003",
+    "TC002",
+    "TC001",
 ]
 
 

@@ -1,7 +1,9 @@
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, cast
+from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Literal, Union, cast
+
+import attrs
 from issubclass import issubclass as lenient_issubclass
 from pydantic import BaseModel, Field
 from pydantic._internal._decorators import PydanticDescriptorProxy, unwrap_wrapped_function
@@ -44,14 +46,14 @@ PossibleFieldAttributes = Literal[
 ]
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class FieldChanges:
     default: Any
     default_factory: Any
     alias: str
     title: str
     description: str
-    exclude: "AbstractSetIntStr | MappingIntStrAny | Any"
+    exclude: AbstractSetIntStr | MappingIntStrAny | Any
     const: bool
     deprecated: bool
     fail_fast: bool
@@ -72,7 +74,7 @@ class FieldChanges:
     repr: bool
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class FieldHadInstruction(_HiddenAttributeMixin):
     schema: type[BaseModel]
     name: str
@@ -81,20 +83,20 @@ class FieldHadInstruction(_HiddenAttributeMixin):
     new_name: str
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class FieldDidntHaveInstruction(_HiddenAttributeMixin):
     schema: type[BaseModel]
     name: str
     attributes: tuple[str, ...]
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class FieldDidntExistInstruction(_HiddenAttributeMixin):
     schema: type[BaseModel]
     name: str
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class FieldExistedAsInstruction(_HiddenAttributeMixin):
     schema: type[BaseModel]
     name: str
@@ -102,7 +104,7 @@ class FieldExistedAsInstruction(_HiddenAttributeMixin):
 
 
 # TODO (https://github.com/zmievsa/cadwyn/issues/112): Add an ability to add extras
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class AlterFieldInstructionFactory:
     schema: type[BaseModel]
     name: str
@@ -117,7 +119,7 @@ class AlterFieldInstructionFactory:
         alias: str = Sentinel,
         title: str = Sentinel,
         description: str = Sentinel,
-        exclude: "AbstractSetIntStr | MappingIntStrAny | Any" = Sentinel,
+        exclude: AbstractSetIntStr | MappingIntStrAny | Any = Sentinel,
         const: bool = Sentinel,
         gt: float = Sentinel,
         ge: float = Sentinel,
@@ -172,7 +174,7 @@ class AlterFieldInstructionFactory:
 
     def didnt_have(self, *attributes: PossibleFieldAttributes) -> FieldDidntHaveInstruction:
         for attribute in attributes:
-            if attribute not in FieldChanges.__dataclass_fields__:
+            if attribute not in attrs.fields_dict(FieldChanges):
                 raise CadwynStructureError(
                     f"Unknown attribute {attribute!r}. Are you sure it's a valid field attribute?"
                 )
@@ -206,19 +208,19 @@ def _get_model_decorators(model: type[BaseModel]):
     ]
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class ValidatorExistedInstruction:
     schema: type[BaseModel]
     validator: Callable[..., Any] | PydanticDescriptorProxy
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class ValidatorDidntExistInstruction:
     schema: type[BaseModel]
     name: str
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class AlterValidatorInstructionFactory:
     schema: type[BaseModel]
     func: Callable[..., Any] | PydanticDescriptorProxy
@@ -232,23 +234,23 @@ class AlterValidatorInstructionFactory:
         return ValidatorDidntExistInstruction(self.schema, self.func.__name__)
 
 
-AlterSchemaSubInstruction = (
-    FieldHadInstruction
-    | FieldDidntHaveInstruction
-    | FieldDidntExistInstruction
-    | FieldExistedAsInstruction
-    | ValidatorExistedInstruction
-    | ValidatorDidntExistInstruction
-)
+AlterSchemaSubInstruction = Union[
+    FieldHadInstruction,
+    FieldDidntHaveInstruction,
+    FieldDidntExistInstruction,
+    FieldExistedAsInstruction,
+    ValidatorExistedInstruction,
+    ValidatorDidntExistInstruction,
+]
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class SchemaHadInstruction(_HiddenAttributeMixin):
     schema: type[BaseModel]
     name: str
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class AlterSchemaInstructionFactory:
     schema: type[BaseModel]
 
@@ -256,9 +258,9 @@ class AlterSchemaInstructionFactory:
         return AlterFieldInstructionFactory(self.schema, name)
 
     def validator(
-        self, func: "Callable[..., Any] | classmethod[Any, Any, Any] | PydanticDescriptorProxy", /
+        self, func: Callable[..., Any] | classmethod[Any, Any, Any] | PydanticDescriptorProxy, /
     ) -> AlterValidatorInstructionFactory:
-        func = cast(Callable | PydanticDescriptorProxy, unwrap_wrapped_function(func))
+        func = cast("Callable | PydanticDescriptorProxy", unwrap_wrapped_function(func))
 
         if not isinstance(func, PydanticDescriptorProxy):
             if hasattr(func, "__self__"):

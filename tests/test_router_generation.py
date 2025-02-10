@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import importlib
 import re
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from datetime import date
 from enum import Enum, auto
-from typing import Annotated, Any, NewType, TypeAlias, cast, get_args
+from typing import Annotated, Any, NewType, cast, get_args
 from uuid import UUID
 
 import pytest
@@ -17,6 +19,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from pytest_fixture_classes import fixture_class
 from starlette.responses import FileResponse
+from typing_extensions import TypeAlias
 
 from cadwyn import VersionBundle, VersionedAPIRouter
 from cadwyn.exceptions import CadwynError, RouterGenerationError, RouterPathParamsModifiedError

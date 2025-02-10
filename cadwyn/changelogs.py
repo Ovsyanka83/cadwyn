@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import copy
 import datetime
 import sys
 from enum import auto
 from logging import getLogger
-from typing import Any, Literal, TypeVar, cast, get_args
+from typing import Any, Literal, TypeVar, Union, cast, get_args
 
 from fastapi._compat import (
     GenerateJsonSchema,
@@ -49,12 +51,12 @@ else:  # pragma: no cover
 
 _logger = getLogger(__name__)
 
-T = TypeVar("T", bound=PossibleInstructions | type[VersionChange])
+T = TypeVar("T", bound=Union[PossibleInstructions, type[VersionChange]])
 
 
 def hidden(instruction_or_version_change: T) -> T:
     if isinstance(
-        instruction_or_version_change, staticmethod | ValidatorDidntExistInstruction | ValidatorExistedInstruction
+        instruction_or_version_change, (staticmethod, ValidatorDidntExistInstruction, ValidatorExistedInstruction)
     ):
         return instruction_or_version_change
 
@@ -62,10 +64,10 @@ def hidden(instruction_or_version_change: T) -> T:
     return instruction_or_version_change
 
 
-def _generate_changelog(versions: VersionBundle, router: _RootHeaderAPIRouter) -> "CadwynChangelogResource":
+def _generate_changelog(versions: VersionBundle, router: _RootHeaderAPIRouter) -> CadwynChangelogResource:
     changelog = CadwynChangelogResource()
     schema_generators = generate_versioned_models(versions)
-    for version, older_version in zip(versions, versions.versions[1:], strict=False):
+    for version, older_version in zip(versions, versions.versions[1:]):
         routes_from_newer_version = router.versioned_routers[version.value].routes
         schemas_from_older_version = get_fields_from_routes(router.versioned_routers[older_version.value].routes)
         version_changelog = CadwynVersion(value=version.value)
@@ -84,7 +86,7 @@ def _generate_changelog(versions: VersionBundle, router: _RootHeaderAPIRouter) -
                 *version_change.alter_schema_instructions,
             ]:
                 if (
-                    isinstance(instruction, ValidatorDidntExistInstruction | ValidatorExistedInstruction)
+                    isinstance(instruction, (ValidatorDidntExistInstruction, ValidatorExistedInstruction))
                     or instruction.is_hidden_from_changelog
                 ):
                     continue
@@ -280,30 +282,32 @@ class CadwynEndpointWasRemovedChangelogEntry(BaseModel):
 
 
 class CadwynChangelogResource(BaseModel):
-    versions: "list[CadwynVersion]" = Field(default_factory=list)
+    versions: list[CadwynVersion] = Field(default_factory=list)
 
 
 class CadwynVersion(BaseModel):
     value: datetime.date
-    changes: "list[CadwynVersionChange]" = Field(default_factory=list)
+    changes: list[CadwynVersionChange] = Field(default_factory=list)
 
 
 class CadwynVersionChange(BaseModel):
     description: str
     side_effects: bool
-    instructions: "list[CadwynVersionChangeInstruction]" = Field(default_factory=list)
+    instructions: list[CadwynVersionChangeInstruction] = Field(default_factory=list)
 
 
 CadwynVersionChangeInstruction = RootModel[
-    CadwynEnumMembersWereAddedChangelogEntry
-    | CadwynEnumMembersWereChangedChangelogEntry
-    | CadwynEndpointWasAddedChangelogEntry
-    | CadwynEndpointWasRemovedChangelogEntry
-    | CadwynSchemaFieldWasRemovedChangelogEntry
-    | CadwynSchemaFieldWasAddedChangelogEntry
-    | CadwynFieldAttributesWereChangedChangelogEntry
-    | CadwynEndpointHadChangelogEntry
-    | CadwynSchemaWasChangedChangelogEntry
+    Union[
+        CadwynEnumMembersWereAddedChangelogEntry,
+        CadwynEnumMembersWereChangedChangelogEntry,
+        CadwynEndpointWasAddedChangelogEntry,
+        CadwynEndpointWasRemovedChangelogEntry,
+        CadwynSchemaFieldWasRemovedChangelogEntry,
+        CadwynSchemaFieldWasAddedChangelogEntry,
+        CadwynFieldAttributesWereChangedChangelogEntry,
+        CadwynEndpointHadChangelogEntry,
+        CadwynSchemaWasChangedChangelogEntry,
+    ]
 ]
 
 
@@ -315,18 +319,18 @@ def _convert_version_change_instruction_to_changelog_entry(  # noqa: C901
     schemas_from_older_version: list[ModelField],
     routes_from_newer_version: list[APIRoute],
 ):
-    match instruction:
-        case EndpointDidntExistInstruction():
+    try:
+        if isinstance(instruction, EndpointDidntExistInstruction):
             return CadwynEndpointWasAddedChangelogEntry(
                 path=instruction.endpoint_path,
                 methods=cast(Any, instruction.endpoint_methods),
             )
-        case EndpointExistedInstruction():
+        if isinstance(instruction, EndpointExistedInstruction):
             return CadwynEndpointWasRemovedChangelogEntry(
                 path=instruction.endpoint_path,
                 methods=cast(Any, instruction.endpoint_methods),
             )
-        case EndpointHadInstruction():
+        if isinstance(instruction, EndpointHadInstruction):
             if instruction.attributes.include_in_schema is not Sentinel:
                 return CadwynEndpointWasRemovedChangelogEntry(
                     path=instruction.endpoint_path,
@@ -381,7 +385,7 @@ def _convert_version_change_instruction_to_changelog_entry(  # noqa: C901
                 changes=attribute_changes,
             )
 
-        case FieldHadInstruction() | FieldDidntHaveInstruction():
+        if isinstance(instruction, (FieldHadInstruction, FieldDidntHaveInstruction)):
             old_field_name = _get_older_field_name(instruction.schema, instruction.name, generator_from_older_version)
 
             if isinstance(instruction, FieldHadInstruction) and instruction.new_name is not Sentinel:
@@ -442,14 +446,14 @@ def _convert_version_change_instruction_to_changelog_entry(  # noqa: C901
                 field=old_field_name,
                 attribute_changes=attribute_changes,
             )
-        case EnumDidntHaveMembersInstruction():
+        if isinstance(instruction, EnumDidntHaveMembersInstruction):
             enum = generator_from_newer_version._get_wrapper_for_model(instruction.enum)
 
             return CadwynEnumMembersWereAddedChangelogEntry(
                 enum=enum.name,
                 members=[CadwynEnumMember(name=name, value=value) for name, value in enum.members.items()],
             )
-        case EnumHadMembersInstruction():
+        if isinstance(instruction, EnumHadMembersInstruction):
             new_enum = generator_from_newer_version[instruction.enum]
             old_enum = generator_from_older_version[instruction.enum]
 
@@ -467,18 +471,18 @@ def _convert_version_change_instruction_to_changelog_entry(  # noqa: C901
                     for name in instruction.members
                 ],
             )
-        case SchemaHadInstruction():
+        if isinstance(instruction, SchemaHadInstruction):
             model = generator_from_newer_version._get_wrapper_for_model(instruction.schema)
 
             return CadwynSchemaWasChangedChangelogEntry(
                 model=instruction.name, modified_attributes=CadwynModelModifiedAttributes(name=model.name)
             )
-        case FieldExistedAsInstruction():
+        if isinstance(instruction, FieldExistedAsInstruction):
             affected_model_names = _get_affected_model_names(
                 instruction, generator_from_newer_version, schemas_from_older_version
             )
             return CadwynSchemaFieldWasRemovedChangelogEntry(models=affected_model_names, field=instruction.name)
-        case FieldDidntExistInstruction():
+        if isinstance(instruction, FieldDidntExistInstruction):
             model = generator_from_newer_version[instruction.schema]
             affected_model_names = _get_affected_model_names(
                 instruction, generator_from_newer_version, schemas_from_older_version
@@ -489,7 +493,7 @@ def _convert_version_change_instruction_to_changelog_entry(  # noqa: C901
                 field=instruction.name,
                 field_info=_get_openapi_representation_of_a_field(model, instruction.name),
             )
-        case _:  # pragma: no cover
+        else:  # pragma: no cover
             _logger.warning(
                 "Encountered an unknown instruction. "
                 "This should not have happened. "
@@ -497,3 +501,6 @@ def _convert_version_change_instruction_to_changelog_entry(  # noqa: C901
                 instruction,
             )
             return None
+    finally:
+        # Part of 3.9 convertion, to keep indent of above block the same when converting from match to if/else
+        pass

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import datetime
 from collections.abc import Callable, Coroutine, Sequence
@@ -36,7 +38,7 @@ CURR_DIR = Path(__file__).resolve()
 logger = getLogger(__name__)
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass()
 class FakeDependencyOverridesProvider:
     dependency_overrides: dict[Callable[..., Any], Callable[..., Any]]
 

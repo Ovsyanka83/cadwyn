@@ -1,8 +1,10 @@
-from collections.abc import Callable, Collection, Sequence
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any
+from __future__ import annotations
 
+from collections.abc import Callable, Collection, Sequence
+from enum import Enum
+from typing import Any, Union
+
+import attrs
 from fastapi import Response
 from fastapi.params import Depends
 from fastapi.routing import APIRoute
@@ -16,7 +18,7 @@ from .common import _HiddenAttributeMixin
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class EndpointAttributesPayload:
     # Fastapi API routes also have "endpoint" and "dependency_overrides_provider" fields.
     # We do not use them because:
@@ -55,7 +57,7 @@ class EndpointAttributesPayload:
     generate_unique_id_function: Callable[[APIRoute], str]
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class EndpointHadInstruction(_HiddenAttributeMixin):
     endpoint_path: str
     endpoint_methods: set[str]
@@ -63,21 +65,21 @@ class EndpointHadInstruction(_HiddenAttributeMixin):
     attributes: EndpointAttributesPayload
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class EndpointExistedInstruction(_HiddenAttributeMixin):
     endpoint_path: str
     endpoint_methods: set[str]
     endpoint_func_name: str | None
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class EndpointDidntExistInstruction(_HiddenAttributeMixin):
     endpoint_path: str
     endpoint_methods: set[str]
     endpoint_func_name: str | None
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class EndpointInstructionFactory:
     endpoint_path: str
     endpoint_methods: set[str]
@@ -164,4 +166,4 @@ def _validate_that_strings_are_valid_http_methods(methods: Collection[str]):
         )
 
 
-AlterEndpointSubInstruction = EndpointDidntExistInstruction | EndpointExistedInstruction | EndpointHadInstruction
+AlterEndpointSubInstruction = Union[EndpointDidntExistInstruction, EndpointExistedInstruction, EndpointHadInstruction]

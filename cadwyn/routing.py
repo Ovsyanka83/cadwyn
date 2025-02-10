@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import bisect
 from collections.abc import Sequence
 from contextvars import ContextVar

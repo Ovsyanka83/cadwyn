@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import functools
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, ParamSpec, cast, overload
+from typing import ClassVar, cast
 
 from fastapi import Request, Response
 from starlette.datastructures import MutableHeaders
+from typing_extensions import Any, ParamSpec, overload
 
 from cadwyn._utils import same_definition_as_in
 from cadwyn.structure.endpoints import _validate_that_strings_are_valid_http_methods
@@ -119,11 +122,11 @@ def convert_request_to_next_version_for(
     /,
     *additional_schemas: type,
     check_usage: bool = True,
-) -> "type[staticmethod[_P, None]]": ...
+) -> type[staticmethod[_P, None]]: ...
 
 
 @overload
-def convert_request_to_next_version_for(path: str, methods: list[str], /) -> "type[staticmethod[_P, None]]": ...
+def convert_request_to_next_version_for(path: str, methods: list[str], /) -> type[staticmethod[_P, None]]: ...
 
 
 def convert_request_to_next_version_for(
@@ -132,7 +135,7 @@ def convert_request_to_next_version_for(
     /,
     *additional_schemas: type,
     check_usage: bool = True,
-) -> "type[staticmethod[_P, None]]":
+) -> type[staticmethod[_P, None]]:
     _validate_decorator_args(schema_or_path, methods_or_second_schema, additional_schemas)
 
     def decorator(transformer: Callable[[RequestInfo], None]) -> Any:
@@ -185,7 +188,7 @@ def convert_response_to_previous_version_for(
     *schemas: type,
     migrate_http_errors: bool = False,
     check_usage: bool = True,
-) -> "type[staticmethod[_P, None]]": ...
+) -> type[staticmethod[_P, None]]: ...
 
 
 @overload
@@ -195,7 +198,7 @@ def convert_response_to_previous_version_for(
     /,
     *,
     migrate_http_errors: bool = False,
-) -> "type[staticmethod[_P, None]]": ...
+) -> type[staticmethod[_P, None]]: ...
 
 
 def convert_response_to_previous_version_for(
@@ -205,7 +208,7 @@ def convert_response_to_previous_version_for(
     *additional_schemas: type,
     migrate_http_errors: bool = False,
     check_usage: bool = True,
-) -> "type[staticmethod[_P, None]]":
+) -> type[staticmethod[_P, None]]:
     _validate_decorator_args(schema_or_path, methods_or_second_schema, additional_schemas)
 
     def decorator(transformer: Callable[[ResponseInfo], None]) -> Any:

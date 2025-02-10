@@ -1,10 +1,16 @@
+from __future__ import annotations
+
+import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union
 
 from pydantic._internal._decorators import unwrap_wrapped_function
 
 Sentinel: Any = object()
-UnionType = type(int | str) | type(Union[int, str])
+if sys.version_info >= (3, 10):
+    UnionType = type(int | str) | type(Union[int, str])
+else:
+    UnionType = type(Union[int, str])
 _T = TypeVar("_T", bound=Callable)
 
 
