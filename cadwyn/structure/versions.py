@@ -393,7 +393,7 @@ class VersionBundle:
         response_info: ResponseInfo,
         current_version: VersionDate,
         head_response_model: type[BaseModel],
-        path: str,
+        head_route_path: str,
         method: str,
     ) -> ResponseInfo:
         for v in self.versions:
@@ -407,7 +407,7 @@ class VersionBundle:
                         version_change.alter_response_by_schema_instructions[head_response_model]
                     )
 
-                if path in version_change.alter_response_by_path_instructions:
+                if head_route_path in version_change.alter_response_by_path_instructions:
                     for instruction in version_change.alter_response_by_path_instructions[path]:
                         if method in instruction.methods:  # pragma: no branch # Safe branch to skip
                             migrations_to_apply.append(instruction)  # noqa: PERF401
@@ -563,7 +563,7 @@ class VersionBundle:
             response_info,
             api_version,
             head_route.response_model,
-            route.path,
+            head_route.path,
             method,
         )
         if isinstance(response_or_response_body, FastapiResponse):

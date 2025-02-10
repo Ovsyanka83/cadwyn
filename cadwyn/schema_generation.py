@@ -171,7 +171,7 @@ def migrate_response_body(
         response,
         current_version=version,
         head_response_model=latest_response_model,
-        path="\0\0\0",
+        head_route_path="\0\0\0",
         method="GET",
     )
 

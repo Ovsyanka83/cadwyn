@@ -5,6 +5,10 @@ Please follow [the Keep a Changelog standard](https://keepachangelog.com/en/1.0.
 
 ## [Unreleased]
 
+### Fixed
+
+* Fix response migrations if response migration is defined by the URI and coincides with the endpoint migration.
+
 ## [4.5.0]
 
 ### Added
