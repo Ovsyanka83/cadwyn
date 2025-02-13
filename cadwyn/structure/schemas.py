@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from issubclass import issubclass as lenient_issubclass
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, AliasPath, BaseModel, Field
 from pydantic._internal._decorators import PydanticDescriptorProxy, unwrap_wrapped_function
+from pydantic.config import JsonDict
 from pydantic.fields import FieldInfo
 
 from cadwyn._utils import Sentinel, fully_unwrap_decorator
@@ -19,57 +20,80 @@ if TYPE_CHECKING:
 PossibleFieldAttributes = Literal[
     "default",
     "default_factory",
-    "alias",
+    "alias_priority",
+    "validation_alias",
+    "serialization_alias",
     "title",
+    "field_title_generator",
     "description",
+    "examples",
     "exclude",
     "const",
+    "deprecated",
+    "frozen",
+    "validate_default",
+    "repr",
+    "init",
+    "init_var",
+    "kw_only",
+    "fail_fast",
     "gt",
     "ge",
     "lt",
     "le",
-    "deprecated",
-    "fail_fast",
     "strict",
+    "coerce_numbers_to_str",
     "multiple_of",
     "allow_inf_nan",
     "max_digits",
     "decimal_places",
     "min_length",
     "max_length",
+    "union_mode",
     "allow_mutation",
     "pattern",
     "discriminator",
-    "repr",
 ]
 
 
+# TODO: Add json_schema_extra as a breaking change in a major version
 @dataclass(slots=True)
 class FieldChanges:
     default: Any
     default_factory: Any
-    alias: str
-    title: str
+    alias_priority: int | None
+    validation_alias: str | AliasPath | AliasChoices | None
+    serialization_alias: str | None
+    title: str | None
+    field_title_generator: Callable[[str, FieldInfo], str] | None
     description: str
+    examples: list[Any] | None
     exclude: "AbstractSetIntStr | MappingIntStrAny | Any"
     const: bool
     deprecated: bool
+    frozen: bool | None
+    validate_default: bool | None
+    repr: bool
+    init: bool | None
+    init_var: bool | None
+    kw_only: bool | None
     fail_fast: bool
     gt: float
     ge: float
     lt: float
     le: float
     strict: bool
+    coerce_numbers_to_str: bool | None
     multiple_of: float
     allow_inf_nan: bool
     max_digits: int
     decimal_places: int
     min_length: int
     max_length: int
+    union_mode: Literal["smart", "left_to_right"]
     allow_mutation: bool
     pattern: str
     discriminator: str
-    repr: bool
 
 
 @dataclass(slots=True)
@@ -114,28 +138,39 @@ class AlterFieldInstructionFactory:
         type: Any = Sentinel,
         default: Any = Sentinel,
         default_factory: Callable = Sentinel,
-        alias: str = Sentinel,
+        alias_priority: int = Sentinel,
+        validation_alias: str = Sentinel,
+        serialization_alias: str = Sentinel,
         title: str = Sentinel,
+        field_title_generator: Callable[[str, FieldInfo], str] = Sentinel,
         description: str = Sentinel,
+        examples: list[Any] = Sentinel,
         exclude: "AbstractSetIntStr | MappingIntStrAny | Any" = Sentinel,
         const: bool = Sentinel,
+        deprecated: bool = Sentinel,
+        frozen: bool = Sentinel,
+        validate_default: bool = Sentinel,
+        repr: bool = Sentinel,
+        init: bool = Sentinel,
+        init_var: bool = Sentinel,
+        kw_only: bool = Sentinel,
+        fail_fast: bool = Sentinel,
         gt: float = Sentinel,
         ge: float = Sentinel,
         lt: float = Sentinel,
         le: float = Sentinel,
         strict: bool = Sentinel,
-        deprecated: bool = Sentinel,
+        coerce_numbers_to_str: bool = Sentinel,
         multiple_of: float = Sentinel,
         allow_inf_nan: bool = Sentinel,
         max_digits: int = Sentinel,
         decimal_places: int = Sentinel,
         min_length: int = Sentinel,
         max_length: int = Sentinel,
+        union_mode: Literal["smart", "left_to_right"] = Sentinel,
         allow_mutation: bool = Sentinel,
         pattern: str = Sentinel,
         discriminator: str = Sentinel,
-        repr: bool = Sentinel,
-        fail_fast: bool = Sentinel,
     ) -> FieldHadInstruction:
         return FieldHadInstruction(
             schema=self.schema,
@@ -145,28 +180,39 @@ class AlterFieldInstructionFactory:
             field_changes=FieldChanges(
                 default=default,
                 default_factory=default_factory,
-                alias=alias,
+                alias_priority=alias_priority,
+                validation_alias=validation_alias,
+                serialization_alias=serialization_alias,
                 title=title,
+                field_title_generator=field_title_generator,
                 description=description,
+                examples=examples,
                 exclude=exclude,
                 const=const,
+                deprecated=deprecated,
+                frozen=frozen,
+                validate_default=validate_default,
+                repr=repr,
+                init=init,
+                init_var=init_var,
+                kw_only=kw_only,
+                fail_fast=fail_fast,
                 gt=gt,
                 ge=ge,
                 lt=lt,
                 le=le,
-                deprecated=deprecated,
                 strict=strict,
+                coerce_numbers_to_str=coerce_numbers_to_str,
                 multiple_of=multiple_of,
                 allow_inf_nan=allow_inf_nan,
                 max_digits=max_digits,
                 decimal_places=decimal_places,
                 min_length=min_length,
                 max_length=max_length,
+                union_mode=union_mode,
                 allow_mutation=allow_mutation,
                 pattern=pattern,
                 discriminator=discriminator,
-                repr=repr,
-                fail_fast=fail_fast,
             ),
         )
 

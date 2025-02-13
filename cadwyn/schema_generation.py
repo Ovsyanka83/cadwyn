@@ -40,6 +40,7 @@ from pydantic._internal._decorators import (
     RootValidatorDecoratorInfo,
     ValidatorDecoratorInfo,
 )
+from pydantic._internal._typing_extra import try_eval_type as pydantic_try_eval_type
 from pydantic.fields import ComputedFieldInfo, FieldInfo
 from typing_extensions import Doc, Self, _AnnotatedAlias, assert_never
 
@@ -418,6 +419,7 @@ class _AnnotationTransformer:
         # because such copies could produce weird behaviors at runtime, especially if you/fastapi do any comparisons.
         # It's defined here and not on the method because of this: https://youtu.be/sVjtp6tGo0g
         self.generator = generator
+        # TODO: Rewrite this to memoize
         self.change_versions_of_a_non_container_annotation = functools.cache(
             self._change_version_of_a_non_container_annotation
         )
@@ -492,6 +494,7 @@ class _AnnotationTransformer:
             ) or isinstance(annotation, fastapi.security.base.SecurityBase):
                 return annotation
 
+            # If we do not use modifier, we will get an unhashable module error
             def modifier(annotation: Any):
                 return self.change_version_of_annotation(annotation)
 
@@ -531,6 +534,9 @@ class _AnnotationTransformer:
         annotation_modifying_wrapper = annotation_modifying_wrapper_factory(call)
         old_params = inspect.signature(call).parameters
         callable_annotations = annotation_modifying_wrapper.__annotations__
+        callable_annotations = {
+            k: v if type(v) is not str else _try_eval_type(v, call.__globals__) for k, v in callable_annotations.items()
+        }
         annotation_modifying_wrapper.__annotations__ = modify_annotations(callable_annotations)
         annotation_modifying_wrapper.__defaults__ = modify_defaults(
             tuple(p.default for p in old_params.values() if p.default is not inspect.Signature.empty),
@@ -977,3 +983,11 @@ class _EnumWrapper(Generic[_T_ENUM]):
             and k not in _DummyEnum.__dict__
             and (k not in mro_dict or mro_dict[k] is not v)
         }
+
+
+def _try_eval_type(value: Any, globals: dict[str, Any]) -> Any:
+    new_value, success = pydantic_try_eval_type(value, globals)
+    if success:
+        return new_value
+    else:
+        return value

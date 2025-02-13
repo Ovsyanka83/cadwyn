@@ -5,6 +5,11 @@ Please follow [the Keep a Changelog standard](https://keepachangelog.com/en/1.0.
 
 ## [Unreleased]
 
+### Added
+
+* Added support for more field attributes in `schema.had()` and `schema.didnt_have()`: `field_title_generator`, `fail_fast`, `coerce_numbers_to_str`, `union_mode`, `allow_mutation`, `pattern`, `discriminator`
+* Added support for forwardrefs in body fields (for example, when you use `from __future__ import annotations` in the file with your routes)
+
 ## [4.5.0]
 
 ### Added
